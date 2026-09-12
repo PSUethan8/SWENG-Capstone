@@ -2,7 +2,7 @@
 //  GridLineTests.swift
 //  GridLineTests
 //
-//  Created by Kenton Porter on 9/12/26.
+//  Created by Kenton Porter.
 //
 
 import Testing
