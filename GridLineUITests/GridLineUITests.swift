@@ -2,7 +2,7 @@
 //  GridLineUITests.swift
 //  GridLineUITests
 //
-//  Created by Kenton Porter on 9/12/26.
+//  Created by Kenton & Ethan.
 //
 
 import XCTest
