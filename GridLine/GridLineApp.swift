@@ -2,16 +2,21 @@
 //  GridLineApp.swift
 //  GridLine
 //
-//  Created by Kenton Porter on 9/12/26.
+//  Created by Kenton & Ethan.
 //
 
 import SwiftUI
 
 @main
-struct GridLineApp: App {
+@MainActor
+struct GridlineApp: App {
+
+    @StateObject private var trackingViewModel = TrackingViewModel()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(trackingViewModel)
         }
     }
 }
