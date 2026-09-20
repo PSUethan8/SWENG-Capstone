@@ -8,7 +8,19 @@
 import Foundation
 import CoreLocation
 
-final class LocationService: NSObject {
+protocol LocationProviding: AnyObject {
+    var authorizationStatus: CLAuthorizationStatus { get }
+
+    var onAuthorizationChange: ((CLAuthorizationStatus) -> Void)? { get set }
+    var onLocationUpdate: ((CLLocation) -> Void)? { get set }
+    var onError: ((Error) -> Void)? { get set }
+
+    func requestAuthorization()
+    func startUpdatingLocation()
+    func stopUpdatingLocation()
+}
+
+final class LocationService: NSObject, LocationProviding {
 
     private let locationManager = CLLocationManager()
 

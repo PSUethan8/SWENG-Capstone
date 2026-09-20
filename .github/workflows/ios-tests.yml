@@ -1,0 +1,48 @@
+name: iOS Automated Tests
+
+on:
+  push:
+    branches:
+      - main
+      - "test/**"
+      - "tests/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sprint-1-tests:
+    name: Sprint 1 automated tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Select an available iPhone Simulator
+        shell: bash
+        run: |
+          simulator_id="$(xcrun simctl list devices available -j | python3 -c 'import json, sys; data=json.load(sys.stdin); ids=[device["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device.get("isAvailable") and device.get("name", "").startswith("iPhone")]; print(ids[0] if ids else "")')"
+          if [ -z "$simulator_id" ]; then
+            echo "No available iPhone Simulator was found." >&2
+            exit 1
+          fi
+          echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+
+      - name: Run GridLine unit tests
+        run: |
+          xcodebuild \
+            -project GridLine.xcodeproj \
+            -scheme GridLine \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:GridLineTests \
+            CODE_SIGNING_ALLOWED=NO \
+            test

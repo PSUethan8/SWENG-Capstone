@@ -22,11 +22,12 @@ final class TrackingViewModel: ObservableObject {
 
     @Published private(set) var errorMessage: String?
 
-    private let locationService = LocationService()
+    private let locationService: any LocationProviding
 
     private var shouldStartAfterAuthorization = false
 
-    init() {
+    init(locationService: any LocationProviding = LocationService()) {
+        self.locationService = locationService
         authorizationStatus = locationService.authorizationStatus
 
         locationService.onAuthorizationChange = { [weak self] status in
