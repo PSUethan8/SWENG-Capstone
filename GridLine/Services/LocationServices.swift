@@ -75,11 +75,15 @@ extension LocationService: CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        guard let latestLocation = locations.last else {
-            return
+        // Forward every location in the batch, oldest first, so that
+        // processing sees readings in chronological order.
+        let orderedLocations = locations.sorted {
+            $0.timestamp < $1.timestamp
         }
 
-        onLocationUpdate?(latestLocation)
+        for location in orderedLocations {
+            onLocationUpdate?(location)
+        }
     }
 
     func locationManager(
