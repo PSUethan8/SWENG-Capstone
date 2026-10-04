@@ -38,6 +38,9 @@ final class TrackingViewModel: ObservableObject {
     /// Processed speed and direction. Unknown values are `nil`, never zero.
     @Published private(set) var movement: MovementMetrics = .unavailable
 
+    /// Elapsed time and accepted distance. Frozen after Stop until a new Start.
+    @Published private(set) var sessionMetrics: SessionMetrics = .zero
+
     @Published private(set) var sessionStartTime: Date?
     @Published private(set) var sessionEndTime: Date?
 
@@ -51,6 +54,7 @@ final class TrackingViewModel: ObservableObject {
 
     private var locationProcessor: LocationProcessor
     private var movementProcessor: MovementMetricsProcessor
+    private var sessionMetricsCalculator: SessionMetricsCalculator
 
     private var shouldStartAfterAuthorization = false
     private var isAcquisitionSuspended = false
@@ -76,6 +80,7 @@ final class TrackingViewModel: ObservableObject {
         self.now = now
         locationProcessor = LocationProcessor(configuration: configuration)
         movementProcessor = MovementMetricsProcessor(configuration: configuration)
+        sessionMetricsCalculator = SessionMetricsCalculator(configuration: configuration)
         authorizationStatus = locationService.authorizationStatus
         currentTime = now()
 
@@ -202,7 +207,11 @@ final class TrackingViewModel: ObservableObject {
         currentTime = endTime
         gpsQuality = .inactive
 
-        // Live movement is not meaningful once the session has ended.
+        // Freeze time and distance. Live movement is not meaningful once
+        // the session has ended.
+        sessionMetricsCalculator.stop(at: endTime)
+        sessionMetrics = sessionMetricsCalculator.metrics(at: endTime)
+
         movementProcessor.invalidate()
         movement = .unavailable
 
@@ -241,6 +250,8 @@ final class TrackingViewModel: ObservableObject {
         locationProcessor.reset(sessionStartTime: startTime)
         movementProcessor.reset()
         movement = .unavailable
+        sessionMetricsCalculator.start(at: startTime)
+        sessionMetrics = .zero
 
         sessionStartTime = startTime
         sessionEndTime = nil
@@ -353,6 +364,7 @@ final class TrackingViewModel: ObservableObject {
         case .accepted:
             acceptedSamples.append(result.sample)
             movement = movementProcessor.update(with: result)
+            sessionMetricsCalculator.record(result)
             gpsQuality = .good
 
             if activeErrorKind == .transient {
@@ -379,6 +391,7 @@ final class TrackingViewModel: ObservableObject {
         }
 
         currentTime = time
+        sessionMetrics = sessionMetricsCalculator.metrics(at: time)
 
         // No suitable reading within the timeout, even without any callback.
         if !isAcquisitionSuspended && locationProcessor.hasTimedOut(at: time) {
@@ -398,6 +411,7 @@ final class TrackingViewModel: ObservableObject {
     /// across a gap, and clears live speed and direction.
     private func interruptContinuity() {
         locationProcessor.breakContinuity()
+        sessionMetricsCalculator.breakContinuity()
 
         movementProcessor.invalidate()
         movement = .unavailable
