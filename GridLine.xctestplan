@@ -1,0 +1,41 @@
+{
+  "configurations" : [
+    {
+      "id" : "4E2C1B7A-9D3F-4A61-8B25-6F0E7C9D1A42",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:GridLine.xcodeproj",
+          "identifier" : "6A47EDB93055EAED0082FF80",
+          "name" : "GridLine"
+        }
+      ]
+    }
+  },
+  "testTargets" : [
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:GridLine.xcodeproj",
+        "identifier" : "6A47EDC63055EAEF0082FF80",
+        "name" : "GridLineTests"
+      }
+    },
+    {
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:GridLine.xcodeproj",
+        "identifier" : "6A47EDD03055EAEF0082FF80",
+        "name" : "GridLineUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

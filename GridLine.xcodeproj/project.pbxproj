@@ -27,7 +27,7 @@
 		6A47EDBA3055EAED0082FF80 /* GridLine.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GridLine.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6A47EDC73055EAEF0082FF80 /* GridLineTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GridLineTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6A47EDD13055EAEF0082FF80 /* GridLineUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GridLineUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		6ACE9BF13069BD0E00108D29 /* GridLine.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = GridLine.xctestplan; path = ../GridLine.xctestplan; sourceTree = "<group>"; };
+		6ACE9BF13069BD0E00108D29 /* GridLine.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = GridLine.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */

@@ -11,7 +11,7 @@ The `GridLineTests` target contains 15 automated tests for the completed Sprint 
 | TC-10 through TC-12 | Location updates, inactive-session behavior, and location errors |
 | TC-13 through TC-15 | Required sample fields, speed conversion, and invalid sensor values |
 
-The tests use a mock location provider, so they do not need a live GPS signal or an interactive permission dialog. GitHub Actions runs the suite on an iOS Simulator whenever changes are pushed to `main`, a `test/**` branch, or a `tests/**` branch, and for pull requests.
+The tests use a mock location provider, so they do not need a live GPS signal or an interactive permission dialog. GitHub Actions runs the suite on an iOS Simulator whenever changes are pushed to `main`, a `test/**` branch, a `tests/**` branch, or a `feature/**` branch, and for pull requests.
 
 ## Run on GitHub Actions
 

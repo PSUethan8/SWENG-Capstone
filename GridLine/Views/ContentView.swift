@@ -12,6 +12,8 @@ struct ContentView: View {
 
     @EnvironmentObject private var tracking: TrackingViewModel
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         NavigationStack {
 
@@ -72,7 +74,7 @@ struct ContentView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
 
-                    Text(tracking.isTracking ? "Session Active" : "Ready")
+                    Text(sessionStatusTitle)
                         .font(.title2)
                         .fontWeight(.semibold)
                 }
@@ -80,8 +82,13 @@ struct ContentView: View {
                 Spacer()
 
                 Circle()
-                    .fill(tracking.isTracking ? Color.green : Color.gray)
+                    .fill(sessionStatusColor)
                     .frame(width: 14, height: 14)
+                    .accessibilityHidden(true)
+            }
+
+            if tracking.isTracking {
+                gpsQualityRow
             }
 
             Divider()
@@ -101,29 +108,77 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
+    private var gpsQualityRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+
+            Label(tracking.gpsQuality.title, systemImage: gpsQualityIcon)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(gpsQualityColor)
+
+            if let guidance = tracking.gpsQuality.guidance {
+                Text(guidance)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     // MARK: - Metrics
 
+    private var metricColumns: [GridItem] {
+        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+
+        return Array(
+            repeating: GridItem(.flexible(), spacing: 12),
+            count: columnCount
+        )
+    }
+
     private var metrics: some View {
-        HStack(spacing: 12) {
+        LazyVGrid(columns: metricColumns, spacing: 12) {
 
             metricCard(
                 title: "Speed",
-                value: String(format: "%.1f", tracking.currentSpeedMPH),
+                value: speedText,
                 unit: "MPH",
                 icon: "speedometer"
             )
 
             metricCard(
+                title: "Direction",
+                value: courseText,
+                unit: tracking.movement.compassDirection ?? "direction",
+                icon: "location.north.line"
+            )
+
+            metricCard(
+                title: "Time",
+                value: formattedDuration(tracking.sessionMetrics.elapsedSeconds),
+                unit: tracking.hasCompletedSession ? "final" : "elapsed",
+                icon: "stopwatch"
+            )
+
+            metricCard(
+                title: "Distance",
+                value: String(format: "%.2f", tracking.sessionMetrics.totalDistanceMiles),
+                unit: tracking.hasCompletedSession ? "miles (final)" : "miles",
+                icon: "road.lanes"
+            )
+
+            metricCard(
                 title: "Accuracy",
                 value: accuracyText,
-                unit: "meters",
+                unit: "meters (latest)",
                 icon: "scope"
             )
 
             metricCard(
                 title: "Samples",
-                value: "\(tracking.samples.count)",
-                unit: "received",
+                value: "\(tracking.acceptedSamples.count) / \(tracking.samples.count)",
+                unit: "accepted / received",
                 icon: "dot.radiowaves.left.and.right"
             )
         }
@@ -141,14 +196,19 @@ struct ContentView: View {
             Image(systemName: icon)
                 .font(.title3)
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
 
             Text(value)
                 .font(.title2)
                 .fontWeight(.bold)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
 
             Text(unit)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
 
             Text(title)
                 .font(.caption2)
@@ -156,8 +216,12 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
+        .padding(.horizontal, 8)
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(value == "--" ? "Unavailable" : "\(value) \(unit)")
     }
 
     // MARK: - Tracking Button
@@ -200,12 +264,19 @@ struct ContentView: View {
     private var locationDetails: some View {
         VStack(alignment: .leading, spacing: 14) {
 
-            Label("Latest Location", systemImage: "mappin.and.ellipse")
+            Label("Latest Accepted Location", systemImage: "mappin.and.ellipse")
                 .font(.headline)
 
             Divider()
 
-            if let sample = tracking.latestSample {
+            if let sample = tracking.latestAcceptedSample {
+
+                if tracking.isTracking && tracking.gpsQuality != .good {
+                    Text("Last known location. Current GPS readings are not reliable.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 locationRow(
                     title: "Latitude",
@@ -226,18 +297,24 @@ struct ContentView: View {
                         )
                 )
 
-                if let course = sample.courseDegrees {
+                if tracking.isTracking,
+                   let age = tracking.secondsSinceLastAcceptedFix {
                     locationRow(
-                        title: "Direction",
-                        value: String(format: "%.0f°", course)
+                        title: "Updated",
+                        value: freshnessText(age)
                     )
                 }
+
+                locationRow(
+                    title: "Filtered Readings",
+                    value: "\(tracking.rejectedSampleCount)"
+                )
 
             } else {
 
                 Text(
                     tracking.isTracking
-                    ? "Waiting for the first location sample..."
+                    ? "Waiting for a reliable location..."
                     : "Start a session to begin receiving location data."
                 )
                 .font(.subheadline)
@@ -287,12 +364,113 @@ struct ContentView: View {
 
     // MARK: - Helpers
 
+    private var sessionStatusTitle: String {
+        if tracking.isTracking {
+            return "Session Active"
+        }
+
+        return tracking.hasCompletedSession ? "Session Complete" : "Ready"
+    }
+
+    private var sessionStatusColor: Color {
+        guard tracking.isTracking else {
+            return .gray
+        }
+
+        return tracking.gpsQuality == .good ? .green : .orange
+    }
+
+    private var gpsQualityIcon: String {
+        switch tracking.gpsQuality {
+
+        case .inactive:
+            return "location.slash"
+
+        case .acquiring:
+            return "antenna.radiowaves.left.and.right"
+
+        case .good:
+            return "checkmark.circle.fill"
+
+        case .poorAccuracy:
+            return "exclamationmark.triangle.fill"
+
+        case .temporarilyUnavailable:
+            return "antenna.radiowaves.left.and.right.slash"
+
+        case .permissionUnavailable:
+            return "location.slash.fill"
+        }
+    }
+
+    private var gpsQualityColor: Color {
+        switch tracking.gpsQuality {
+
+        case .inactive:
+            return .secondary
+
+        case .acquiring:
+            return .blue
+
+        case .good:
+            return .green
+
+        case .poorAccuracy, .temporarilyUnavailable:
+            return .orange
+
+        case .permissionUnavailable:
+            return .red
+        }
+    }
+
+    private var speedText: String {
+        guard let speed = tracking.currentSpeedMPH else {
+            return "--"
+        }
+
+        return String(format: "%.1f", speed)
+    }
+
+    private var courseText: String {
+        guard let course = tracking.movement.courseDegrees else {
+            return "--"
+        }
+
+        return String(format: "%.0f°", course)
+    }
+
     private var accuracyText: String {
         guard let accuracy = tracking.currentAccuracyMeters else {
             return "--"
         }
 
         return String(format: "%.1f", accuracy)
+    }
+
+    /// `mm:ss`, or `hh:mm:ss` once a session reaches an hour.
+    private func formattedDuration(_ seconds: TimeInterval) -> String {
+        let totalSeconds = Int(max(0, seconds))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let remainingSeconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds)
+        }
+
+        return String(format: "%02d:%02d", minutes, remainingSeconds)
+    }
+
+    private func freshnessText(_ age: TimeInterval) -> String {
+        if age < 1 {
+            return "Just now"
+        }
+
+        if age < 60 {
+            return "\(Int(age)) sec ago"
+        }
+
+        return "\(formattedDuration(age)) ago"
     }
 
     private var authorizationDescription: String {
