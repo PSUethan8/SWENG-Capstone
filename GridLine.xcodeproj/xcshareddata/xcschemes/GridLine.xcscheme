@@ -30,7 +30,7 @@
       shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
          <TestPlanReference
-            reference = "container:../GridLine.xctestplan"
+            reference = "container:GridLine.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>
