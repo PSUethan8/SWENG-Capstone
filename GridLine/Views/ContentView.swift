@@ -108,7 +108,7 @@ struct ContentView: View {
 
             metricCard(
                 title: "Speed",
-                value: String(format: "%.1f", tracking.currentSpeedMPH),
+                value: tracking.currentSpeedMPH.map { String(format: "%.1f", $0) } ?? "--",
                 unit: "MPH",
                 icon: "speedometer"
             )

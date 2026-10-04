@@ -35,6 +35,9 @@ final class TrackingViewModel: ObservableObject {
 
     @Published private(set) var gpsQuality: GPSQualityState = .inactive
 
+    /// Processed speed and direction. Unknown values are `nil`, never zero.
+    @Published private(set) var movement: MovementMetrics = .unavailable
+
     @Published private(set) var sessionStartTime: Date?
     @Published private(set) var sessionEndTime: Date?
 
@@ -47,6 +50,7 @@ final class TrackingViewModel: ObservableObject {
     private let now: () -> Date
 
     private var locationProcessor: LocationProcessor
+    private var movementProcessor: MovementMetricsProcessor
 
     private var shouldStartAfterAuthorization = false
     private var isAcquisitionSuspended = false
@@ -71,6 +75,7 @@ final class TrackingViewModel: ObservableObject {
         self.locationService = locationService
         self.now = now
         locationProcessor = LocationProcessor(configuration: configuration)
+        movementProcessor = MovementMetricsProcessor(configuration: configuration)
         authorizationStatus = locationService.authorizationStatus
         currentTime = now()
 
@@ -127,8 +132,9 @@ final class TrackingViewModel: ObservableObject {
         !isTracking && sessionEndTime != nil
     }
 
-    var currentSpeedMPH: Double {
-        latestSample?.speedMPH ?? 0
+    /// Processed speed in MPH, or `nil` when speed is unknown.
+    var currentSpeedMPH: Double? {
+        movement.speedMPH
     }
 
     /// Accuracy of the latest received reading, or `nil` when it is invalid.
@@ -196,6 +202,10 @@ final class TrackingViewModel: ObservableObject {
         currentTime = endTime
         gpsQuality = .inactive
 
+        // Live movement is not meaningful once the session has ended.
+        movementProcessor.invalidate()
+        movement = .unavailable
+
         if activeErrorKind != nil {
             activeErrorKind = nil
             errorMessage = nil
@@ -229,6 +239,8 @@ final class TrackingViewModel: ObservableObject {
         rejectionCounts.removeAll()
 
         locationProcessor.reset(sessionStartTime: startTime)
+        movementProcessor.reset()
+        movement = .unavailable
 
         sessionStartTime = startTime
         sessionEndTime = nil
@@ -340,6 +352,7 @@ final class TrackingViewModel: ObservableObject {
 
         case .accepted:
             acceptedSamples.append(result.sample)
+            movement = movementProcessor.update(with: result)
             gpsQuality = .good
 
             if activeErrorKind == .transient {
@@ -382,9 +395,12 @@ final class TrackingViewModel: ObservableObject {
     // MARK: - Continuity and Permission
 
     /// Breaks the current segment so no movement or distance is calculated
-    /// across a gap.
+    /// across a gap, and clears live speed and direction.
     private func interruptContinuity() {
         locationProcessor.breakContinuity()
+
+        movementProcessor.invalidate()
+        movement = .unavailable
     }
 
     private func suspendAcquisitionForPermission() {
