@@ -468,6 +468,10 @@ final class GridLineSprint3SystemTests: XCTestCase {
     /// Stops as soon as the element is visible, so already-visible elements
     /// cost a single check. Slow swipes keep momentum from scrolling past
     /// tall cards at accessibility text sizes.
+    ///
+    /// The result of the check that ended the loop is asserted rather than
+    /// re-checking, because hit-testing can briefly report false right after
+    /// the app returns to the foreground.
     @MainActor
     private func reveal(
         _ element: XCUIElement,
@@ -475,9 +479,19 @@ final class GridLineSprint3SystemTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        for attempt in 0..<30 {
+        let maximumSwipes = 30
+
+        var revealed = false
+
+        for attempt in 0...maximumSwipes {
 
             if isVisible(element) {
+                revealed = true
+                break
+            }
+
+            // The last pass only checks the result of the final swipe.
+            if attempt == maximumSwipes {
                 break
             }
 
@@ -493,7 +507,7 @@ final class GridLineSprint3SystemTests: XCTestCase {
                     app.swipeUp(velocity: .slow)
                 }
 
-            } else if attempt < 15 {
+            } else if attempt < maximumSwipes / 2 {
                 // Not in the hierarchy yet; search further down first.
                 app.swipeUp(velocity: .slow)
             } else {
@@ -502,7 +516,7 @@ final class GridLineSprint3SystemTests: XCTestCase {
         }
 
         XCTAssertTrue(
-            isVisible(element),
+            revealed,
             "Element \(element) could not be scrolled into view.",
             file: file,
             line: line
