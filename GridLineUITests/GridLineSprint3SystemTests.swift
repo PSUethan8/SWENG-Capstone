@@ -218,6 +218,139 @@ final class GridLineSprint3SystemTests: XCTestCase {
         XCTAssertEqual(summaryValue("Filtered Readings", in: app), "0")
     }
 
+    // MARK: - TC-55 Recorded Route (FR-13)
+
+    @MainActor
+    func testTC55RouteHiddenWithoutAcceptedPoints() throws {
+
+        let app = launchApp(scenario: "empty")
+
+        startTracking(in: app)
+
+        // Give the scripted service time to prove nothing arrives.
+        _ = element("recordedRoute", in: app).waitForExistence(timeout: 2)
+
+        XCTAssertFalse(element("recordedRoute", in: app).exists)
+
+        stopTracking(in: app)
+
+        XCTAssertFalse(element("recordedRoute", in: app).exists)
+    }
+
+    @MainActor
+    func testTC55SinglePointRouteShowsOnlyStart() throws {
+
+        let app = launchApp(scenario: "stationary")
+
+        startTracking(in: app)
+
+        waitForValue(
+            metric("Samples", in: app),
+            "1 / 1 accepted / received",
+            in: app
+        )
+
+        assertRouteDescription(
+            "1 accepted route points across 1 segment.",
+            in: app
+        )
+
+        XCTAssertTrue(mapMarker("Start", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(mapMarker("End", in: app).exists)
+        XCTAssertFalse(element("route.gapNote", in: app).exists)
+
+        // The route remains visible after the session is completed.
+        stopTracking(in: app)
+
+        assertRouteDescription(
+            "1 accepted route points across 1 segment.",
+            in: app
+        )
+    }
+
+    @MainActor
+    func testTC55MultiplePointRouteShowsStartAndEnd() throws {
+
+        let app = launchApp(scenario: "moving")
+
+        startTracking(in: app)
+
+        waitForValue(
+            metric("Samples", in: app),
+            "4 / 4 accepted / received",
+            in: app
+        )
+
+        stopTracking(in: app)
+
+        assertRouteDescription(
+            "4 accepted route points across 1 segment.",
+            in: app
+        )
+
+        XCTAssertTrue(mapMarker("Start", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(mapMarker("End", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(element("route.gapNote", in: app).exists)
+    }
+
+    @MainActor
+    func testTC55InterruptedRouteShowsSeparateSegments() throws {
+
+        let app = launchApp(scenario: "interrupted")
+
+        startTracking(in: app)
+
+        // Seven readings: five accepted, one poor-accuracy rejection,
+        // and one pending recovery candidate.
+        waitForValue(
+            metric("Samples", in: app),
+            "5 / 7 accepted / received",
+            in: app
+        )
+
+        stopTracking(in: app)
+
+        assertRouteDescription(
+            "5 accepted route points across 2 segments.",
+            in: app
+        )
+
+        let gapNote = element("route.gapNote", in: app)
+
+        reveal(gapNote, in: app)
+
+        XCTAssertTrue(gapNote.label.contains("does not draw distance across those gaps"))
+
+        XCTAssertTrue(mapMarker("Start", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(mapMarker("End", in: app).waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    private func assertRouteDescription(
+        _ expected: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let description = element("route.description", in: app)
+
+        reveal(description, in: app, file: file, line: line)
+
+        XCTAssertEqual(description.label, expected, file: file, line: line)
+    }
+
+    /// MapKit exposes `Marker` titles as accessibility elements inside the map.
+    @MainActor
+    private func mapMarker(
+        _ title: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        app.maps.firstMatch
+            .descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", title))
+            .firstMatch
+    }
+
     // MARK: - Helpers
 
     @MainActor

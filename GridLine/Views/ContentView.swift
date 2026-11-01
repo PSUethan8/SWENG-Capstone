@@ -511,6 +511,7 @@ struct ContentView: View {
                 systemImage: "map"
             )
             .font(.headline)
+            .accessibilityIdentifier("recordedRoute")
 
             // Small explanation so the user knows how much trusted
             // GPS data actually made it onto the map.
@@ -519,6 +520,7 @@ struct ContentView: View {
                 .foregroundStyle(
                     .secondary
                 )
+                .accessibilityIdentifier("route.description")
 
             RouteMapView(
                 segments:
@@ -541,6 +543,7 @@ struct ContentView: View {
                     horizontal: false,
                     vertical: true
                 )
+                .accessibilityIdentifier("route.gapNote")
             }
         }
         .padding()
