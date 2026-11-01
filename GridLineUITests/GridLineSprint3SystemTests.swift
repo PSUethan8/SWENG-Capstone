@@ -339,14 +339,15 @@ final class GridLineSprint3SystemTests: XCTestCase {
         XCTAssertEqual(description.label, expected, file: file, line: line)
     }
 
-    /// MapKit exposes `Marker` titles as accessibility elements inside the map.
+    /// MapKit exposes each `Marker` title as an accessibility element. On
+    /// iOS 27 the element labeled with the exact title is a sibling of the
+    /// `Map` element rather than a descendant, so search the whole app.
     @MainActor
     private func mapMarker(
         _ title: String,
         in app: XCUIApplication
     ) -> XCUIElement {
-        app.maps.firstMatch
-            .descendants(matching: .any)
+        app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", title))
             .firstMatch
     }
@@ -463,6 +464,10 @@ final class GridLineSprint3SystemTests: XCTestCase {
 
     /// Scrolls until the element is on screen. Large accessibility text
     /// pushes most of the content below the first screen.
+    ///
+    /// Stops as soon as the element is visible, so already-visible elements
+    /// cost a single check. Slow swipes keep momentum from scrolling past
+    /// tall cards at accessibility text sizes.
     @MainActor
     private func reveal(
         _ element: XCUIElement,
@@ -470,12 +475,30 @@ final class GridLineSprint3SystemTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        for _ in 0..<10 where !isVisible(element) {
-            app.swipeUp()
-        }
+        for attempt in 0..<30 {
 
-        for _ in 0..<20 where !isVisible(element) {
-            app.swipeDown()
+            if isVisible(element) {
+                break
+            }
+
+            let window = app.windows.firstMatch.frame
+
+            if element.exists {
+
+                // Scroll toward the element based on where it sits
+                // relative to the middle of the screen.
+                if element.frame.midY < window.midY {
+                    app.swipeDown(velocity: .slow)
+                } else {
+                    app.swipeUp(velocity: .slow)
+                }
+
+            } else if attempt < 15 {
+                // Not in the hierarchy yet; search further down first.
+                app.swipeUp(velocity: .slow)
+            } else {
+                app.swipeDown(velocity: .slow)
+            }
         }
 
         XCTAssertTrue(
