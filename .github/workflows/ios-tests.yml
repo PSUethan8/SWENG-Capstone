@@ -13,20 +13,28 @@ on:
 permissions:
   contents: read
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
-  sprint-1-tests:
-    name: Sprint 1 automated tests
+  unit-tests:
+    name: GridLine unit and integration tests (Sprints 1-3)
     runs-on: macos-26
     timeout-minutes: 30
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Verify the selected Xcode is installed
+        shell: bash
+        run: |
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "Configured Xcode was not found at $DEVELOPER_DIR. Installed versions:" >&2
+            ls -d /Applications/Xcode*.app >&2 || true
+            exit 1
+          fi
+          xcodebuild -version
 
       - name: Select an available iPhone Simulator
         shell: bash
@@ -38,12 +46,112 @@ jobs:
           fi
           echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
 
-      - name: Run GridLine unit tests
+      - name: Run GridLine unit and integration tests
         run: |
           xcodebuild \
             -project GridLine.xcodeproj \
             -scheme GridLine \
             -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -only-testing:GridLineTests \
+            -enableCodeCoverage YES \
+            -resultBundlePath TestResults/UnitTests.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             test
+
+      - name: Summarize results and coverage
+        if: always()
+        shell: bash
+        run: |
+          bundle=TestResults/UnitTests.xcresult
+          if [ ! -d "$bundle" ]; then
+            echo "No result bundle was produced." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          xcrun xcresulttool get test-results summary --path "$bundle" --compact > TestResults/unit-test-summary.json || true
+          xcrun xccov view --report "$bundle" > TestResults/unit-coverage.txt || true
+          xcrun xccov view --report --json "$bundle" > TestResults/unit-coverage.json || true
+          {
+            echo "## Unit and integration test results"
+            echo '```json'
+            cat TestResults/unit-test-summary.json
+            echo '```'
+            echo "## Code coverage"
+            echo '```'
+            cat TestResults/unit-coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: TestResults/
+          if-no-files-found: warn
+
+  system-tests:
+    name: GridLine Sprint 3 system UI tests
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify the selected Xcode is installed
+        shell: bash
+        run: |
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "Configured Xcode was not found at $DEVELOPER_DIR. Installed versions:" >&2
+            ls -d /Applications/Xcode*.app >&2 || true
+            exit 1
+          fi
+          xcodebuild -version
+
+      - name: Select an available iPhone Simulator
+        shell: bash
+        run: |
+          simulator_id="$(xcrun simctl list devices available -j | python3 -c 'import json, sys; data=json.load(sys.stdin); ids=[device["udid"] for runtime, devices in data["devices"].items() if "iOS" in runtime for device in devices if device.get("isAvailable") and device.get("name", "").startswith("iPhone")]; print(ids[0] if ids else "")')"
+          if [ -z "$simulator_id" ]; then
+            echo "No available iPhone Simulator was found." >&2
+            exit 1
+          fi
+          echo "SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+
+      # Only the Sprint 3 system tests are run. The template launch and
+      # performance tests are not requirement coverage.
+      - name: Run Sprint 3 system UI tests
+        run: |
+          xcodebuild \
+            -project GridLine.xcodeproj \
+            -scheme GridLine \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -only-testing:GridLineUITests/GridLineSprint3SystemTests \
+            -resultBundlePath TestResults/SystemTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Summarize system test results
+        if: always()
+        shell: bash
+        run: |
+          bundle=TestResults/SystemTests.xcresult
+          if [ ! -d "$bundle" ]; then
+            echo "No result bundle was produced." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          xcrun xcresulttool get test-results summary --path "$bundle" --compact > TestResults/system-test-summary.json || true
+          {
+            echo "## Sprint 3 system UI test results"
+            echo '```json'
+            cat TestResults/system-test-summary.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload system test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-test-results
+          path: TestResults/
+          if-no-files-found: warn
