@@ -12,17 +12,17 @@ There are 53 automated case IDs in `GridLineTests` and 3 system case IDs. The sy
 
 ## Execution status
 
-The Sprint 3 tests were written on a Windows machine and have **not yet been compiled or executed**. Fill in the following from the first macOS run:
+The Sprint 3 tests were written on a Windows machine. The results below are from the first macOS run, after fixing the UI test failures it found (see "First macOS run" under Known observations).
 
 | Item | Result |
 | --- | --- |
-| Tested commit | _pending_ |
-| Xcode / simulator / iOS | _pending_ |
-| Run timestamp | _pending_ |
-| `GridLineTests` executed / passed / failed / skipped | _pending_ |
-| `GridLineSprint3SystemTests` executed / passed / failed / skipped | _pending_ |
-| Overall app coverage | _pending_ (Sprint 2 historical value: 79.2% of 1,927 executable lines, for comparison only) |
-| Per-file coverage: `SessionStatisticsCalculator.swift`, `SessionStatistics.swift`, `RouteSegment.swift`, `TrackingViewModel.swift` | _pending_ |
+| Tested commit | `33d2ce0` (branch `tests/sprint3-automated-tests`) |
+| Xcode / simulator / iOS | Xcode 27.0 (27A266a) / iPhone 17 Simulator / iOS 27.0 (24A434) |
+| Run timestamp | 2026-11-01 18:46 EST (unit and integration), 2026-11-01 18:47 EST (system UI) |
+| `GridLineTests` executed / passed / failed / skipped | 57 / 57 / 0 / 0 (55 test functions; TC-47 runs once for each of its 3 arguments) |
+| `GridLineSprint3SystemTests` executed / passed / failed / skipped | 9 / 9 / 0 / 0 |
+| Overall app coverage | 67.5% of 3,332 executable lines (2,249 covered), from `GridLineTests` only (Sprint 2 historical value: 79.2% of 1,927 executable lines, for comparison only) |
+| Per-file coverage: `SessionStatisticsCalculator.swift`, `SessionStatistics.swift`, `RouteSegment.swift`, `TrackingViewModel.swift` | 100% (43/43), 100% (14/14), 100% (11/11), 91.6% (697/761) |
 | Physical-device acceptance (UAT-S3-01 to UAT-S3-04) | _pending_ |
 
 ## Traceability
@@ -187,3 +187,9 @@ Data is kept only for the current in-memory session. Persistence across app rela
 
 - `SessionStatisticsCalculator` clamps negative inputs with `max(0, value)`. From reading the code, a NaN input also becomes zero, but an infinite distance would still give an infinite average. No requirement covers non-finite session metrics, so none is tested. This is noted for review only, not verified by a run.
 - The route description uses "points" for a count of one ("1 accepted route points"). The UI tests assert the current text.
+- **First macOS run (commit `6f45722`).** All unit and integration tests passed. Five system UI tests failed, all because of test code; the app behaved correctly. Fixed in `daab80c` and `33d2ce0`:
+  - TC-52 (default text size): `reveal()` always made 30 visibility checks, about 4–5 s per call. The `moving` scenario stops sending readings after about 2 s, so the app's 10 s GPS timeout correctly cleared Direction before the test checked it. `reveal()` now stops as soon as the element is visible.
+  - TC-52 (accessibility text size): fast swipes scrolled past the Speed card. `reveal()` now scrolls toward the element with slow swipes.
+  - TC-55 (three map tests): on iOS 27 the element labeled with the exact `Marker` title is a sibling of the `Map` element, not a descendant. `mapMarker()` now searches the whole app.
+  - A follow-up run then failed TC-54 (empty summary) once: right after the app returns to the foreground, `isHittable` can briefly report false. `reveal()` now asserts the result of the check that ended its loop instead of checking again.
+- The `xcodebuild` command for the system UI tests under "Run locally on a Mac" built but never started a test on the first macOS run (Xcode 27.0, stopped after 10 minutes). The system results above were run from Xcode instead. The likely cause is `CODE_SIGNING_ALLOWED=NO` with the UI test runner, but this has not been confirmed.
