@@ -204,6 +204,7 @@ struct ContentView: View {
         .accessibilityElement(
             children: .combine
         )
+        .accessibilityIdentifier("gpsQuality")
     }
 
     // MARK: - Live Metrics
@@ -363,6 +364,7 @@ struct ContentView: View {
             ? "Unavailable"
             : "\(value) \(unit)"
         )
+        .accessibilityIdentifier("metric.\(title)")
     }
 
     // MARK: - Tracking Button
@@ -409,6 +411,7 @@ struct ContentView: View {
             ? .red
             : .blue
         )
+        .accessibilityIdentifier("trackingButton")
     }
 
     // MARK: - Sprint 3 Session Summary
