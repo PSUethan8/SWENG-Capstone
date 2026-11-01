@@ -54,7 +54,7 @@ final class GridLineSprint3SystemTests: XCTestCase {
         let time = metric("Time", in: app)
         reveal(time, in: app)
 
-        assertDuration(time, unit: "elapsed")
+        assertDuration(time.value as? String ?? "", unit: "elapsed")
 
         assertFitsHorizontally(metric("Speed", in: app), in: app)
         assertFitsHorizontally(metric("Distance", in: app), in: app)
@@ -103,7 +103,156 @@ final class GridLineSprint3SystemTests: XCTestCase {
         stopTracking(in: app)
     }
 
+    // MARK: - TC-54 Completed Session Summary (FR-12)
+
+    @MainActor
+    func testTC54EmptySessionSummaryPersistsAndClears() throws {
+
+        let app = launchApp(scenario: "empty")
+
+        // No summary before a session has been completed.
+        XCTAssertFalse(element("sessionSummary", in: app).exists)
+
+        startTracking(in: app)
+
+        XCTAssertFalse(element("sessionSummary", in: app).exists)
+
+        stopTracking(in: app)
+
+        verifyEmptySummary(in: app)
+
+        waitForValue(metric("Speed", in: app), "Unavailable", in: app)
+
+        let time = metric("Time", in: app)
+        reveal(time, in: app)
+        assertDuration(time.value as? String ?? "", unit: "final")
+
+        // Leaving and returning keeps the in-memory summary.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+
+        verifyEmptySummary(in: app)
+
+        // A new session clears the summary.
+        startTracking(in: app)
+
+        waitForNonExistence(element("sessionSummary", in: app))
+
+        stopTracking(in: app)
+    }
+
+    @MainActor
+    func testTC54MovingSessionSummaryAtDefaultTextSize() throws {
+        verifyMovingSessionSummary(contentSize: nil)
+    }
+
+    @MainActor
+    func testTC54MovingSessionSummaryAtAccessibilityTextSize() throws {
+        verifyMovingSessionSummary(contentSize: Self.accessibilityTextSize)
+    }
+
+    @MainActor
+    private func verifyMovingSessionSummary(contentSize: String?) {
+
+        let app = launchApp(scenario: "moving", contentSize: contentSize)
+
+        startTracking(in: app)
+
+        waitForValue(
+            metric("Samples", in: app),
+            "4 / 4 accepted / received",
+            in: app
+        )
+
+        stopTracking(in: app)
+
+        reveal(element("sessionSummary", in: app), in: app)
+
+        // Three 11.1 meter steps is about 0.02 miles.
+        XCTAssertEqual(summaryValue("Distance", in: app), "0.02 miles")
+        XCTAssertEqual(summaryValue("Maximum Speed", in: app), "22.4 MPH")
+        XCTAssertEqual(summaryValue("Accepted Samples", in: app), "4")
+        XCTAssertEqual(summaryValue("Filtered Readings", in: app), "0")
+
+        assertDuration(summaryValue("Elapsed Time", in: app))
+
+        let average = summaryValue("Average Speed", in: app)
+
+        XCTAssertNotNil(
+            average.range(
+                of: "^[0-9]+\\.[0-9] MPH$",
+                options: .regularExpression
+            ),
+            "Unexpected average speed: \"\(average)\"."
+        )
+
+        assertFitsHorizontally(
+            element("summary.Maximum Speed", in: app),
+            in: app
+        )
+
+        // Restarting clears the completed summary.
+        startTracking(in: app)
+
+        waitForNonExistence(element("sessionSummary", in: app))
+
+        stopTracking(in: app)
+    }
+
+    @MainActor
+    private func verifyEmptySummary(in app: XCUIApplication) {
+
+        reveal(element("sessionSummary", in: app), in: app)
+
+        assertDuration(summaryValue("Elapsed Time", in: app))
+
+        XCTAssertEqual(summaryValue("Distance", in: app), "0.00 miles")
+        XCTAssertEqual(summaryValue("Average Speed", in: app), "0.0 MPH")
+
+        // Unknown maximum is shown as "--", not as a zero speed.
+        XCTAssertEqual(summaryValue("Maximum Speed", in: app), "-- MPH")
+
+        XCTAssertEqual(summaryValue("Accepted Samples", in: app), "0")
+        XCTAssertEqual(summaryValue("Filtered Readings", in: app), "0")
+    }
+
     // MARK: - Helpers
+
+    @MainActor
+    private func summaryValue(
+        _ title: String,
+        in app: XCUIApplication
+    ) -> String {
+
+        let value = element("summary.\(title)", in: app)
+
+        reveal(value, in: app)
+
+        return value.label
+    }
+
+    @MainActor
+    private func waitForNonExistence(
+        _ element: XCUIElement,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: element
+        )
+
+        XCTAssertEqual(
+            XCTWaiter().wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Expected \(element.identifier) to disappear.",
+            file: file,
+            line: line
+        )
+    }
 
     @MainActor
     private func launchApp(
@@ -263,16 +412,16 @@ final class GridLineSprint3SystemTests: XCTestCase {
     /// Sessions under an hour use mm:ss.
     @MainActor
     private func assertDuration(
-        _ element: XCUIElement,
-        unit: String,
+        _ value: String,
+        unit: String? = nil,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let value = element.value as? String ?? ""
+        let suffix = unit.map { " \($0)" } ?? ""
 
         XCTAssertNotNil(
             value.range(
-                of: "^[0-9]{2}:[0-9]{2}( \(unit))?$",
+                of: "^[0-9]{2}:[0-9]{2}\(suffix)$",
                 options: .regularExpression
             ),
             "Unexpected duration: \"\(value)\".",

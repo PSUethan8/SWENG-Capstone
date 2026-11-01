@@ -433,6 +433,7 @@ struct ContentView: View {
                     "checkered.flag"
             )
             .font(.headline)
+            .accessibilityIdentifier("sessionSummary")
 
             Divider()
 
@@ -572,6 +573,7 @@ struct ContentView: View {
             Text(value)
                 .fontWeight(.semibold)
                 .monospacedDigit()
+                .accessibilityIdentifier("summary.\(title)")
         }
         .font(.subheadline)
     }
