@@ -11,9 +11,21 @@ import SwiftUI
 @MainActor
 struct GridlineApp: App {
 
-    @StateObject private var trackingViewModel = TrackingViewModel()
+    @StateObject private var trackingViewModel = GridlineApp.makeTrackingViewModel()
 
     @Environment(\.scenePhase) private var scenePhase
+
+    private static func makeTrackingViewModel() -> TrackingViewModel {
+        #if DEBUG
+        // UI system tests launch with a scripted location scenario so they
+        // never depend on live GPS or the permission sheet.
+        if let service = UITestLocationService.fromProcessEnvironment() {
+            return TrackingViewModel(locationService: service)
+        }
+        #endif
+
+        return TrackingViewModel()
+    }
 
     var body: some Scene {
         WindowGroup {

@@ -204,6 +204,7 @@ struct ContentView: View {
         .accessibilityElement(
             children: .combine
         )
+        .accessibilityIdentifier("gpsQuality")
     }
 
     // MARK: - Live Metrics
@@ -363,6 +364,7 @@ struct ContentView: View {
             ? "Unavailable"
             : "\(value) \(unit)"
         )
+        .accessibilityIdentifier("metric.\(title)")
     }
 
     // MARK: - Tracking Button
@@ -409,6 +411,7 @@ struct ContentView: View {
             ? .red
             : .blue
         )
+        .accessibilityIdentifier("trackingButton")
     }
 
     // MARK: - Sprint 3 Session Summary
@@ -430,6 +433,7 @@ struct ContentView: View {
                     "checkered.flag"
             )
             .font(.headline)
+            .accessibilityIdentifier("sessionSummary")
 
             Divider()
 
@@ -507,6 +511,7 @@ struct ContentView: View {
                 systemImage: "map"
             )
             .font(.headline)
+            .accessibilityIdentifier("recordedRoute")
 
             // Small explanation so the user knows how much trusted
             // GPS data actually made it onto the map.
@@ -515,6 +520,7 @@ struct ContentView: View {
                 .foregroundStyle(
                     .secondary
                 )
+                .accessibilityIdentifier("route.description")
 
             RouteMapView(
                 segments:
@@ -537,6 +543,7 @@ struct ContentView: View {
                     horizontal: false,
                     vertical: true
                 )
+                .accessibilityIdentifier("route.gapNote")
             }
         }
         .padding()
@@ -569,6 +576,7 @@ struct ContentView: View {
             Text(value)
                 .fontWeight(.semibold)
                 .monospacedDigit()
+                .accessibilityIdentifier("summary.\(title)")
         }
         .font(.subheadline)
     }
