@@ -9,7 +9,7 @@ import Foundation
 
 /// Processed speed and direction of travel in SI units. A `nil` value means
 /// unknown, which is different from a measured speed of zero.
-struct MovementMetrics: Equatable {
+nonisolated struct MovementMetrics: Equatable, Sendable {
 
     enum Source: Equatable {
         /// Reported by Core Location for an accepted reading.

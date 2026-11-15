@@ -8,7 +8,7 @@
 import Foundation
 
 /// Elapsed time and accepted distance for a tracking session.
-struct SessionMetrics: Equatable {
+nonisolated struct SessionMetrics: Equatable, Sendable {
 
     static let metersPerMile = 1609.344
 

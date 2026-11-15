@@ -9,9 +9,14 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+/// Draws a recorded route as separate polylines, one per continuous segment.
+///
+/// Takes identified coordinate groups so the same view can present the live
+/// route and a saved route without reconstructing `LocationSample` values.
+/// MapKit basemap availability does not affect the route data shown.
 struct RouteMapView: View {
 
-    let segments: [RouteSegment]
+    let segments: [RouteSegmentSnapshot]
 
     @State private var position: MapCameraPosition = .automatic
 
@@ -21,7 +26,7 @@ struct RouteMapView: View {
 
             ForEach(segments) { segment in
 
-                if segment.coordinates.count >= 2 {
+                if segment.points.count >= 2 {
 
                     MapPolyline(
                         coordinates: segment.coordinates
@@ -40,7 +45,7 @@ struct RouteMapView: View {
                 )
             }
 
-            if routeSampleCount > 1,
+            if routePointCount > 1,
                let endCoordinate {
 
                 Marker(
@@ -66,16 +71,16 @@ struct RouteMapView: View {
     }
 
     private var startCoordinate: CLLocationCoordinate2D? {
-        segments.first?.samples.first?.coordinate
+        segments.first?.points.first?.coordinate
     }
 
     private var endCoordinate: CLLocationCoordinate2D? {
-        segments.last?.samples.last?.coordinate
+        segments.last?.points.last?.coordinate
     }
 
-    private var routeSampleCount: Int {
+    private var routePointCount: Int {
         segments.reduce(0) {
-            $0 + $1.samples.count
+            $0 + $1.points.count
         }
     }
 }

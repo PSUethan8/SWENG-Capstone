@@ -32,4 +32,14 @@ struct RouteSegment: Identifiable, Equatable {
     var coordinates: [CLLocationCoordinate2D] {
         samples.map(\.coordinate)
     }
+
+    /// Identified coordinate group used for saving and map presentation.
+    var snapshot: RouteSegmentSnapshot {
+        RouteSegmentSnapshot(
+            id: id,
+            points: samples.map {
+                RoutePoint(latitude: $0.latitude, longitude: $0.longitude)
+            }
+        )
+    }
 }

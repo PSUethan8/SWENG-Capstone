@@ -12,6 +12,9 @@ struct ContentView: View {
 
     @EnvironmentObject private var tracking: TrackingViewModel
 
+    // Sprint 4 - save status of the completed drive and the History entry.
+    @EnvironmentObject private var history: SessionHistoryModel
+
     @Environment(\.dynamicTypeSize)
     private var dynamicTypeSize
 
@@ -36,12 +39,24 @@ struct ContentView: View {
                     // to review the important values from the drive.
                     if tracking.hasCompletedSession {
                         completedSessionSummary
+
+                        // Sprint 4 - make it clear whether this drive has
+                        // reached History yet.
+                        if let saveStatus = completedSaveStatus {
+                            SaveStatusBanner(
+                                status: saveStatus,
+                                retry: retryCompletedSave
+                            )
+                        }
                     }
 
                     // Sprint 3 - the route can update while tracking and
                     // remains visible after the session is completed.
                     if !tracking.routeSegments.isEmpty {
-                        recordedRoute
+                        RouteReviewCard(
+                            segments:
+                                tracking.routeSegments.map(\.snapshot)
+                        )
                     }
 
                     locationDetails
@@ -59,6 +74,23 @@ struct ContentView: View {
                     .systemGroupedBackground
                 )
             )
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+
+                    // Sprint 4 - saved drives can be reviewed at any time,
+                    // without location permission.
+                    NavigationLink {
+                        HistoryListView()
+                    } label: {
+                        Label(
+                            "History",
+                            systemImage: "clock.arrow.circlepath"
+                        )
+                        .labelStyle(.titleAndIcon)
+                    }
+                    .accessibilityIdentifier("historyButton")
+                }
+            }
         }
     }
 
@@ -257,7 +289,7 @@ struct ContentView: View {
             metricCard(
                 title: "Time",
                 value:
-                    formattedDuration(
+                    SessionFormatting.duration(
                         tracking
                             .sessionMetrics
                             .elapsedSeconds
@@ -283,6 +315,17 @@ struct ContentView: View {
                     ? "miles (final)"
                     : "miles",
                 icon: "road.lanes"
+            )
+
+            // Sprint 4 - quickest valid 0-60 MPH run in this drive.
+            metricCard(
+                title: "Best 0–60",
+                value:
+                    SessionFormatting.zeroToSixtyValue(
+                        tracking.bestZeroToSixtySeconds
+                    ),
+                unit: "sec · GPS estimate",
+                icon: "gauge.with.dots.needle.67percent"
             )
 
             metricCard(
@@ -437,51 +480,10 @@ struct ContentView: View {
 
             Divider()
 
-            summaryRow(
-                title: "Elapsed Time",
-                value:
-                    formattedDuration(
-                        statistics
-                            .elapsedSeconds
-                    )
-            )
-
-            summaryRow(
-                title: "Distance",
-                value:
-                    String(
-                        format: "%.2f miles",
-                        statistics
-                            .totalDistanceMiles
-                    )
-            )
-
-            summaryRow(
-                title: "Average Speed",
-                value:
-                    String(
-                        format: "%.1f MPH",
-                        statistics
-                            .averageSpeedMPH
-                    )
-            )
-
-            summaryRow(
-                title: "Maximum Speed",
-                value:
-                    maximumSpeedText
-            )
-
-            summaryRow(
-                title: "Accepted Samples",
-                value:
-                    "\(statistics.acceptedSampleCount)"
-            )
-
-            summaryRow(
-                title: "Filtered Readings",
-                value:
-                    "\(statistics.rejectedSampleCount)"
+            SessionSummaryRows(
+                statistics: statistics,
+                zeroToSixtySeconds:
+                    tracking.bestZeroToSixtySeconds
             )
         }
         .padding()
@@ -497,88 +499,21 @@ struct ContentView: View {
         )
     }
 
-    // MARK: - Sprint 3 Recorded Route
+    // MARK: - Sprint 4 Save Status
 
-    private var recordedRoute: some View {
-
-        VStack(
-            alignment: .leading,
-            spacing: 14
-        ) {
-
-            Label(
-                "Recorded Route",
-                systemImage: "map"
-            )
-            .font(.headline)
-            .accessibilityIdentifier("recordedRoute")
-
-            // Small explanation so the user knows how much trusted
-            // GPS data actually made it onto the map.
-            Text(routeDescription)
-                .font(.footnote)
-                .foregroundStyle(
-                    .secondary
-                )
-                .accessibilityIdentifier("route.description")
-
-            RouteMapView(
-                segments:
-                    tracking.routeSegments
-            )
-
-            if tracking.routeSegments.count > 1 {
-
-                // Multiple route sections mean GPS continuity was broken.
-                // Instead of pretending we know the missing path, we show
-                // the sections separately and explain why.
-                Text(
-                    "Separate route sections indicate a GPS interruption or recovery. Gridline does not draw distance across those gaps."
-                )
-                .font(.footnote)
-                .foregroundStyle(
-                    .secondary
-                )
-                .fixedSize(
-                    horizontal: false,
-                    vertical: true
-                )
-                .accessibilityIdentifier("route.gapNote")
-            }
-        }
-        .padding()
-        .frame(
-            maxWidth: .infinity,
-            alignment: .leading
-        )
-        .background(.background)
-        .clipShape(
-            RoundedRectangle(
-                cornerRadius: 20
-            )
+    private var completedSaveStatus: SessionHistoryModel.SaveStatus? {
+        history.saveStatus(
+            for: tracking.lastCompletedSession?.id
         )
     }
 
-    private func summaryRow(
-        title: String,
-        value: String
-    ) -> some View {
-
-        HStack {
-
-            Text(title)
-                .foregroundStyle(
-                    .secondary
-                )
-
-            Spacer()
-
-            Text(value)
-                .fontWeight(.semibold)
-                .monospacedDigit()
-                .accessibilityIdentifier("summary.\(title)")
+    private func retryCompletedSave() {
+        guard let id =
+                tracking.lastCompletedSession?.id else {
+            return
         }
-        .font(.subheadline)
+
+        history.retrySave(id: id)
     }
 
     // MARK: - Location Details
@@ -860,83 +795,6 @@ struct ContentView: View {
         )
     }
 
-    private var maximumSpeedText: String {
-
-        // "--" and zero intentionally mean different things.
-        // Zero can be a real stationary speed, while nil means the
-        // session never had a trustworthy speed value.
-        guard let speed =
-                tracking
-                    .sessionStatistics
-                    .maximumSpeedMPH else {
-
-            return "-- MPH"
-        }
-
-        return String(
-            format: "%.1f MPH",
-            speed
-        )
-    }
-
-    private var routeDescription: String {
-
-        // Count only accepted points that were actually placed
-        // into one of our route sections.
-        let sampleCount =
-            tracking.routeSegments.reduce(0) {
-                $0 + $1.samples.count
-            }
-
-        let segmentCount =
-            tracking.routeSegments.count
-
-        let segmentWord =
-            segmentCount == 1
-            ? "segment"
-            : "segments"
-
-        return
-            "\(sampleCount) accepted route points across \(segmentCount) \(segmentWord)."
-    }
-
-    // mm:ss normally, then hh:mm:ss once the session passes one hour.
-    private func formattedDuration(
-        _ seconds: TimeInterval
-    ) -> String {
-
-        let totalSeconds =
-            Int(
-                max(0, seconds)
-            )
-
-        let hours =
-            totalSeconds / 3600
-
-        let minutes =
-            (totalSeconds % 3600) / 60
-
-        let remainingSeconds =
-            totalSeconds % 60
-
-        if hours > 0 {
-
-            return String(
-                format:
-                    "%02d:%02d:%02d",
-                hours,
-                minutes,
-                remainingSeconds
-            )
-        }
-
-        return String(
-            format: "%02d:%02d",
-            minutes,
-            remainingSeconds
-        )
-    }
-
     private func freshnessText(
         _ age: TimeInterval
     ) -> String {
@@ -951,7 +809,7 @@ struct ContentView: View {
         }
 
         return
-            "\(formattedDuration(age)) ago"
+            "\(SessionFormatting.duration(age)) ago"
     }
 
     private var authorizationDescription: String {
@@ -1000,8 +858,15 @@ struct ContentView: View {
 
 #Preview {
 
+    let history = SessionHistoryModel(
+        store: InMemorySessionStore()
+    )
+
     ContentView()
         .environmentObject(
-            TrackingViewModel()
+            TrackingViewModel(
+                sessionHistory: history
+            )
         )
+        .environmentObject(history)
 }

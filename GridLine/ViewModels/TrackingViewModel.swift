@@ -68,6 +68,16 @@ final class TrackingViewModel: ObservableObject {
     // This gets frozen at the session end time after Stop.
     @Published private(set) var currentTime: Date
 
+    // Sprint 4 - immutable record of the most recently stopped drive.
+    // The history model owns saving it, so a later Start can clear the
+    // live fields without affecting a save that is still running.
+    @Published private(set) var lastCompletedSession: CompletedSession?
+
+    // Sprint 4 - quickest valid GPS-based 0-60 MPH estimate this drive, in
+    // seconds. nil until a valid run completes. Published only when the
+    // best value actually changes.
+    @Published private(set) var bestZeroToSixtySeconds: TimeInterval?
+
     // MARK: - Services and Processing
 
     // We depend on the LocationProviding protocol rather than directly on
@@ -84,6 +94,23 @@ final class TrackingViewModel: ObservableObject {
 
     // Sprint 3 calculator for average speed, max speed, and final summary values.
     private var sessionStatisticsCalculator = SessionStatisticsCalculator()
+
+    // Sprint 4 - receives one save per successfully stopped session.
+    // nil (the default) keeps the view model free of persistence, which is
+    // what the existing unit tests expect.
+    private let sessionHistory: SessionHistoryModel?
+
+    // Stable identity of the active session, assigned when a session
+    // actually starts and carried into its saved snapshot.
+    private var currentSessionID: UUID?
+
+    // Sprint 4 - 0-60 timing. Uses its own stricter chain of sensor-speed
+    // readings, separate from route and distance continuity.
+    private var zeroToSixtyCalculator: ZeroToSixtyCalculator
+
+    // Timing input is suppressed while the scene is not active, so a run
+    // can never span time the app was not in the foreground.
+    private var isSceneActive = true
 
     private var shouldStartAfterAuthorization = false
     private var isAcquisitionSuspended = false
@@ -108,10 +135,16 @@ final class TrackingViewModel: ObservableObject {
     init(
         locationService: any LocationProviding = LocationService(),
         configuration: LocationProcessingConfiguration = .standard,
-        now: @escaping () -> Date = { Date() }
+        now: @escaping () -> Date = { Date() },
+        sessionHistory: SessionHistoryModel? = nil,
+        zeroToSixtyConfiguration: ZeroToSixtyConfiguration = .standard
     ) {
         self.locationService = locationService
         self.now = now
+        self.sessionHistory = sessionHistory
+
+        zeroToSixtyCalculator =
+            ZeroToSixtyCalculator(configuration: zeroToSixtyConfiguration)
 
         locationProcessor =
             LocationProcessor(configuration: configuration)
@@ -299,6 +332,14 @@ final class TrackingViewModel: ObservableObject {
         // Sprint 3 - make sure the final summary matches the frozen session values.
         refreshSessionStatistics()
 
+        // Sprint 4 - Stop discards any unfinished 0-60 attempt and freezes
+        // the best completed run for the summary and history.
+        zeroToSixtyCalculator.invalidate()
+
+        // Sprint 4 - capture the complete immutable snapshot and queue one save.
+        // Every stopped session is saved, including one with no accepted samples.
+        recordCompletedSession(endTime: endTime)
+
         // Live speed/direction no longer mean anything after the drive ends.
         movementProcessor.invalidate()
         movement = .unavailable
@@ -313,11 +354,25 @@ final class TrackingViewModel: ObservableObject {
     // We are not doing background tracking right now, so we re-check
     // permission and time-based GPS state when returning to the app.
     func handleForegroundEntry() {
+
+        // Sprint 4 - resume 0-60 timing only with fresh evidence gathered
+        // after returning to the foreground.
+        isSceneActive = true
+        zeroToSixtyCalculator.invalidate()
+
         handleAuthorizationChange(
             locationService.authorizationStatus
         )
 
         refreshClock()
+    }
+
+    // Called when the app leaves the active scene (inactive or background).
+    // Tracking behavior is unchanged; only the 0-60 timing chain is broken
+    // and timing input is suppressed until the scene is active again.
+    func handleSceneDeactivation() {
+        isSceneActive = false
+        zeroToSixtyCalculator.invalidate()
     }
 
     // Recalculate session time even if no new GPS callback has arrived.
@@ -335,6 +390,9 @@ final class TrackingViewModel: ObservableObject {
         advanceSessionGeneration()
 
         let startTime = now()
+
+        // Sprint 4 - each actual session gets its own stable identity.
+        currentSessionID = UUID()
 
         // Completely clear the previous drive.
         samples.removeAll()
@@ -360,6 +418,10 @@ final class TrackingViewModel: ObservableObject {
         // Sprint 3 - reset all summary values as well.
         sessionStatisticsCalculator.reset()
         sessionStatistics = .zero
+
+        // Sprint 4 - every new session starts with no 0-60 result.
+        zeroToSixtyCalculator.reset()
+        bestZeroToSixtySeconds = nil
 
         sessionStartTime = startTime
         sessionEndTime = nil
@@ -540,6 +602,13 @@ final class TrackingViewModel: ObservableObject {
 
             movement = updatedMovement
 
+            // Sprint 4 - feed 0-60 timing with the processed sensor speed and
+            // the accepted sample's GPS timestamp and accuracy.
+            recordZeroToSixty(
+                result: result,
+                movement: updatedMovement
+            )
+
             // Distance is also calculated only from accepted continuous readings.
             sessionMetricsCalculator.record(
                 result
@@ -566,7 +635,9 @@ final class TrackingViewModel: ObservableObject {
 
             // This reading looks reasonable, but we are waiting for
             // another reading to confirm the new GPS position.
-            break
+            // Sprint 4 - a pending reading still breaks the stricter
+            // 0-60 timing chain.
+            zeroToSixtyCalculator.invalidate()
 
         case .rejected(let reason):
 
@@ -574,6 +645,10 @@ final class TrackingViewModel: ObservableObject {
                 reason,
                 default: 0
             ] += 1
+
+            // Sprint 4 - every rejected reading breaks the 0-60 timing chain,
+            // even when route processing can continue from its anchor.
+            zeroToSixtyCalculator.invalidate()
 
             if result.breaksContinuity {
 
@@ -700,6 +775,58 @@ final class TrackingViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Sprint 4 Session History
+
+    private func recordCompletedSession(
+        endTime: Date
+    ) {
+
+        guard let sessionID = currentSessionID,
+              let startTime = sessionStartTime else {
+            return
+        }
+
+        let snapshot = CompletedSession(
+            id: sessionID,
+            startDate: startTime,
+            endDate: endTime,
+            statistics: sessionStatistics,
+            routeSegments: routeSegments.map(\.snapshot),
+            zeroToSixtySeconds: zeroToSixtyCalculator.bestDuration
+        )
+
+        lastCompletedSession = snapshot
+
+        sessionHistory?.enqueueSave(snapshot)
+    }
+
+    // MARK: - Sprint 4 0-60 Timing
+
+    private func recordZeroToSixty(
+        result: LocationProcessingResult,
+        movement: MovementMetrics
+    ) {
+
+        guard isSceneActive else {
+            zeroToSixtyCalculator.invalidate()
+            return
+        }
+
+        let improved =
+            zeroToSixtyCalculator.record(
+                timestamp: result.sample.timestamp,
+                speedMetersPerSecond: movement.speedMetersPerSecond,
+                speedSource: movement.speedSource,
+                horizontalAccuracy: result.sample.horizontalAccuracy,
+                acceptanceKind: result.acceptanceKind
+            )
+
+        if improved {
+            bestZeroToSixtySeconds =
+                zeroToSixtyCalculator.bestDuration
+        }
+    }
+
     // MARK: - Continuity and Permission
 
     private func interruptContinuity() {
@@ -714,6 +841,10 @@ final class TrackingViewModel: ObservableObject {
         movementProcessor.invalidate()
 
         movement = .unavailable
+
+        // Sprint 4 - GPS loss, timeout, poor GPS and permission loss all
+        // end the current 0-60 timing chain. The completed best is kept.
+        zeroToSixtyCalculator.invalidate()
     }
 
     private func suspendAcquisitionForPermission() {
