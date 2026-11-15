@@ -126,7 +126,8 @@ struct SessionDetailView: View {
             Divider()
 
             SessionSummaryRows(
-                statistics: session.statistics
+                statistics: session.statistics,
+                zeroToSixtySeconds: session.zeroToSixtySeconds
             )
         }
         .padding()

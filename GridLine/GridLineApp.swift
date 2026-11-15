@@ -82,6 +82,10 @@ struct GridlineApp: App {
             // authorization, elapsed time and GPS quality on return.
             if newPhase == .active {
                 trackingViewModel.handleForegroundEntry()
+            } else {
+                // Sprint 4 - leaving the active scene breaks the 0-60
+                // timing chain and suppresses timing input until return.
+                trackingViewModel.handleSceneDeactivation()
             }
         }
     }

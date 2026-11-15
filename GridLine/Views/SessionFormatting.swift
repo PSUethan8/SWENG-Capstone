@@ -83,6 +83,37 @@ enum SessionFormatting {
         )
     }
 
+    /// Best 0-60 MPH estimate for summary rows, shown to one decimal place
+    /// and identified as a GPS estimate. nil means no valid run completed.
+    static func zeroToSixty(
+        _ seconds: TimeInterval?
+    ) -> String {
+
+        guard let seconds else {
+            return "-- (no valid run)"
+        }
+
+        return String(
+            format: "%.1f sec (GPS est.)",
+            seconds
+        )
+    }
+
+    /// Short 0-60 value for the live metric card.
+    static func zeroToSixtyValue(
+        _ seconds: TimeInterval?
+    ) -> String {
+
+        guard let seconds else {
+            return "--"
+        }
+
+        return String(
+            format: "%.1f",
+            seconds
+        )
+    }
+
     /// Date and time a saved drive was recorded, for example
     /// "Nov 15, 2026 at 3:42 PM".
     static func dateTime(

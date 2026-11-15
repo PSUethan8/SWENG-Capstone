@@ -317,6 +317,17 @@ struct ContentView: View {
                 icon: "road.lanes"
             )
 
+            // Sprint 4 - quickest valid 0-60 MPH run in this drive.
+            metricCard(
+                title: "Best 0–60",
+                value:
+                    SessionFormatting.zeroToSixtyValue(
+                        tracking.bestZeroToSixtySeconds
+                    ),
+                unit: "sec · GPS estimate",
+                icon: "gauge.with.dots.needle.67percent"
+            )
+
             metricCard(
                 title: "Accuracy",
                 value: accuracyText,
@@ -470,7 +481,9 @@ struct ContentView: View {
             Divider()
 
             SessionSummaryRows(
-                statistics: statistics
+                statistics: statistics,
+                zeroToSixtySeconds:
+                    tracking.bestZeroToSixtySeconds
             )
         }
         .padding()

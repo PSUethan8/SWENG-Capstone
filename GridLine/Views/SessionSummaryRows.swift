@@ -13,6 +13,9 @@ struct SessionSummaryRows: View {
 
     let statistics: SessionStatistics
 
+    /// Best 0-60 MPH estimate for the drive, or nil when none completed.
+    let zeroToSixtySeconds: TimeInterval?
+
     var body: some View {
 
         VStack(
@@ -49,6 +52,14 @@ struct SessionSummaryRows: View {
                 value:
                     SessionFormatting.maximumSpeed(
                         statistics.maximumSpeedMPH
+                    )
+            )
+
+            SummaryRow(
+                title: "Best 0–60 MPH",
+                value:
+                    SessionFormatting.zeroToSixty(
+                        zeroToSixtySeconds
                     )
             )
 
