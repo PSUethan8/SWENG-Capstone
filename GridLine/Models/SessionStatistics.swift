@@ -8,7 +8,10 @@
 import Foundation
 
 /// Summary values calculated from trusted session data.
-struct SessionStatistics: Equatable {
+///
+/// Codable so completed sessions can be saved to history. `nonisolated`
+/// lets the session store encode it off the main actor.
+nonisolated struct SessionStatistics: Equatable, Codable, Sendable {
 
     static let zero = SessionStatistics(
         elapsedSeconds: 0,

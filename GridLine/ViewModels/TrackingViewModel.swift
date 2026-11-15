@@ -68,6 +68,11 @@ final class TrackingViewModel: ObservableObject {
     // This gets frozen at the session end time after Stop.
     @Published private(set) var currentTime: Date
 
+    // Sprint 4 - immutable record of the most recently stopped drive.
+    // The history model owns saving it, so a later Start can clear the
+    // live fields without affecting a save that is still running.
+    @Published private(set) var lastCompletedSession: CompletedSession?
+
     // MARK: - Services and Processing
 
     // We depend on the LocationProviding protocol rather than directly on
@@ -84,6 +89,15 @@ final class TrackingViewModel: ObservableObject {
 
     // Sprint 3 calculator for average speed, max speed, and final summary values.
     private var sessionStatisticsCalculator = SessionStatisticsCalculator()
+
+    // Sprint 4 - receives one save per successfully stopped session.
+    // nil (the default) keeps the view model free of persistence, which is
+    // what the existing unit tests expect.
+    private let sessionHistory: SessionHistoryModel?
+
+    // Stable identity of the active session, assigned when a session
+    // actually starts and carried into its saved snapshot.
+    private var currentSessionID: UUID?
 
     private var shouldStartAfterAuthorization = false
     private var isAcquisitionSuspended = false
@@ -108,10 +122,12 @@ final class TrackingViewModel: ObservableObject {
     init(
         locationService: any LocationProviding = LocationService(),
         configuration: LocationProcessingConfiguration = .standard,
-        now: @escaping () -> Date = { Date() }
+        now: @escaping () -> Date = { Date() },
+        sessionHistory: SessionHistoryModel? = nil
     ) {
         self.locationService = locationService
         self.now = now
+        self.sessionHistory = sessionHistory
 
         locationProcessor =
             LocationProcessor(configuration: configuration)
@@ -299,6 +315,10 @@ final class TrackingViewModel: ObservableObject {
         // Sprint 3 - make sure the final summary matches the frozen session values.
         refreshSessionStatistics()
 
+        // Sprint 4 - capture the complete immutable snapshot and queue one save.
+        // Every stopped session is saved, including one with no accepted samples.
+        recordCompletedSession(endTime: endTime)
+
         // Live speed/direction no longer mean anything after the drive ends.
         movementProcessor.invalidate()
         movement = .unavailable
@@ -335,6 +355,9 @@ final class TrackingViewModel: ObservableObject {
         advanceSessionGeneration()
 
         let startTime = now()
+
+        // Sprint 4 - each actual session gets its own stable identity.
+        currentSessionID = UUID()
 
         // Completely clear the previous drive.
         samples.removeAll()
@@ -698,6 +721,30 @@ final class TrackingViewModel: ObservableObject {
             routeSegments =
                 updatedSegments
         }
+    }
+
+    // MARK: - Sprint 4 Session History
+
+    private func recordCompletedSession(
+        endTime: Date
+    ) {
+
+        guard let sessionID = currentSessionID,
+              let startTime = sessionStartTime else {
+            return
+        }
+
+        let snapshot = CompletedSession(
+            id: sessionID,
+            startDate: startTime,
+            endDate: endTime,
+            statistics: sessionStatistics,
+            routeSegments: routeSegments.map(\.snapshot)
+        )
+
+        lastCompletedSession = snapshot
+
+        sessionHistory?.enqueueSave(snapshot)
     }
 
     // MARK: - Continuity and Permission
